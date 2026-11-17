@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Inter-Warehouse Stock Transfers — Multi-Warehouse IMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1 fw-bold">Inter-Warehouse Stock Transfers</h3>
+        <p class="text-muted mb-0">Dispatch eligible batches between warehouses, track in-transit quantities, and preserve batch identity &amp; cost</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Initiate Stock Transfer -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">Initiate Stock Transfer</h6>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('transfers_bp.create') }}">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">1. Eligible Source Batch Holding <span class="text-danger">*</span></label>
+                        <select name="batch_id" class="form-select" required
+                                onchange="const opt = this.options[this.selectedIndex]; document.getElementById('srcWarehouseInput').value = opt.getAttribute('data-wh') || '';">
+                            <option value="">-- Select Source Warehouse &amp; Batch --</option>
+                            {% for h in eligible_holdings if h.warehouse_active %}
+                                <option value="{{ h.batch_id }}" data-wh="{{ h.warehouse_id }}">
+                                    [{{ h.warehouse_code }}] {{ h.sku }} | Batch {{ h.batch_number }} (Avail: {{ h.remaining_quantity }} @ {{ currency_symbol }}{{ "%.2f"|format(h.unit_cost) }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <input type="hidden" name="source_warehouse_id" id="srcWarehouseInput" value="">
+                        <div class="form-text">Only non-expired batches held at active warehouses are listed.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">2. Destination Warehouse <span class="text-danger">*</span></label>
+                        <select name="dest_warehouse_id" class="form-select" required>
+                            <option value="">-- Select Destination Warehouse --</option>
+                            {% for w in warehouses %}
+                                <option value="{{ w.id }}">{{ w.warehouse_code }} — {{ w.name }} ({{ w.location }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">3. Transfer Qty <span class="text-danger">*</span></label>
+                            <input type="number" name="quantity" class="form-control" min="1" required
+                                   placeholder="e.g., 25">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Transfer Date <span class="text-danger">*</span></label>
+                            <input type="date" name="transfer_date" class="form-control" value="{{ today_iso }}" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Initial Action</label>
+                        <select name="initial_action" class="form-select">
+                            <option value="dispatch" selected>Dispatch Immediately (Deduct Source Stock Now)</option>
+                            <option value="draft">Save as Draft (Do Not Deduct Stock Yet)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Transfer Notes</label>
+                        <input type="text" name="notes" class="form-control"
+                               placeholder="e.g., Regional stock balancing">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">Create Transfer</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Transfers Register & Workflow Actions -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Stock Transfers Register ({{ transfers|length }})</h6>
+                <form method="get" action="{{ url_for('transfers_bp.index') }}">
+                    <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">All Statuses</option>
+                        {% for st in statuses %}
+                            <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <div class="card-body p-0">
+                {% if transfers %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Transfer No.</th>
+                                <th>Route (Source &rarr; Dest)</th>
+                                <th>Product &amp; Batch</th>
+                                <th class="text-end">Dispatched / Recv</th>
+                                <th>Status</th>
+                                <th class="text-end">Workflow Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in transfers %}
+                            <tr>
+                                <td>
+                                    <div class="fw-mono fw-bold text-primary small">{{ t.transfer_number }}</div>
+                                    <div class="small text-muted">{{ t.transfer_date }}</div>
+                                </td>
+                                <td>
+                                    <div class="small fw-semibold">{{ t.source_code }} &rarr; {{ t.dest_code }}</div>
+                                    <div class="small text-muted">{{ t.source_name }} to {{ t.dest_name }}</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold small">{{ t.product_name }}</div>
+                                    <div class="small text-muted fw-mono">
+                                        Batch: {{ t.batch_number }} | {{ currency_symbol }}{{ "%.2f"|format(t.unit_cost) }}
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <span class="fw-bold">{{ t.quantity }}</span> /
+                                    <span class="text-success fw-semibold">{{ t.received_quantity }} {{ t.unit }}</span>
+                                    {% if t.in_transit_quantity > 0 and t.status in ('Dispatched', 'Partially Received') %}
+                                        <div class="small text-warning fw-semibold">In Transit: {{ t.in_transit_quantity }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if t.status == 'Received' %}
+                                        <span class="badge bg-success">Received</span>
+                                    {% elif t.status == 'Dispatched' %}
+                                        <span class="badge bg-warning text-dark">Dispatched (In Transit)</span>
+                                    {% elif t.status == 'Partially Received' %}
+                                        <span class="badge bg-info text-dark">Partially Received</span>
+                                    {% elif t.status == 'Draft' %}
+                                        <span class="badge bg-secondary">Draft</span>
+                                    {% else %}
+                                        <span class="badge bg-dark">Cancelled</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-inline-flex gap-1 align-items-center">
+                                        {% if t.status == 'Draft' %}
+                                            <form method="post" action="{{ url_for('transfers_bp.dispatch', transfer_id=t.id) }}">
+                                                <button type="submit" class="btn btn-sm btn-primary">Dispatch</button>
+                                            </form>
+                                        {% endif %}
+
+                                        {% if t.status in ('Dispatched', 'Partially Received') and t.in_transit_quantity > 0 %}
+                                            <form method="post" action="{{ url_for('transfers_bp.receive', transfer_id=t.id) }}" class="d-inline-flex gap-1">
+                                                <input type="number" name="receive_quantity"
+                                                       class="form-control form-control-sm text-end"
+                                                       style="width: 72px;"
+                                                       min="1" max="{{ t.in_transit_quantity }}"
+                                                       value="{{ t.in_transit_quantity }}"
+                                                       title="Quantity to receive at destination">
+                                                <button type="submit" class="btn btn-sm btn-success">Receive</button>
+                                            </form>
+                                        {% endif %}
+
+                                        {% if t.status in ('Draft', 'Dispatched') and t.received_quantity == 0 %}
+                                            <form method="post" action="{{ url_for('transfers_bp.cancel', transfer_id=t.id) }}"
+                                                  data-confirm="Cancel transfer {{ t.transfer_number }}? If already dispatched, stock will be restored to {{ t.source_code }}.">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
+                                            </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No stock transfers recorded yet. Use the form on the left to initiate an inter-warehouse transfer.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

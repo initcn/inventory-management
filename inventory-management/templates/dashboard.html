@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h3 class="mb-1 fw-bold">Operational Dashboard</h3>
+        <p class="text-muted mb-0">Real-time multi-warehouse stock, batch expiry, and replenishment overview</p>
+    </div>
+    <div class="d-flex gap-2">
+        {% if metrics.total_products == 0 %}
+        <form method="post" action="{{ url_for('seed_demo') }}">
+            <button type="submit" class="btn btn-success btn-sm">Load Demonstration Data</button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('purchases') }}" class="btn btn-outline-primary btn-sm">Check Reorder Levels</a>
+        <a href="{{ url_for('transfers') }}" class="btn btn-primary btn-sm">New Stock Transfer</a>
+    </div>
+</div>
+
+<!-- 8 Required KPI Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Total Products</div>
+                <div class="fs-2 fw-bold text-dark mt-1">{{ metrics.total_products }}</div>
+                <div class="small text-muted">Active catalog SKUs</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Active Warehouses</div>
+                <div class="fs-2 fw-bold text-dark mt-1">{{ metrics.total_warehouses }}</div>
+                <div class="small text-muted">Storage locations</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Total Stock Quantity</div>
+                <div class="fs-2 fw-bold text-primary mt-1">{{ metrics.total_stock }}</div>
+                <div class="small text-muted">Units across all batches</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Below Reorder Level</div>
+                <div class="fs-2 fw-bold {% if metrics.below_reorder_count > 0 %}text-danger{% else %}text-success{% endif %} mt-1">
+                    {{ metrics.below_reorder_count }}
+                </div>
+                <div class="small text-muted">Products needing PO</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Expired Batches</div>
+                <div class="fs-2 fw-bold {% if metrics.expired_batches > 0 %}text-danger{% else %}text-dark{% endif %} mt-1">
+                    {{ metrics.expired_batches }}
+                </div>
+                <div class="small text-muted">Blocked from normal FIFO issue</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Approaching Expiry (30d)</div>
+                <div class="fs-2 fw-bold {% if metrics.near_expiry_batches > 0 %}text-warning{% else %}text-dark{% endif %} mt-1">
+                    {{ metrics.near_expiry_batches }}
+                </div>
+                <div class="small text-muted">Batches expiring within 30 days</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Pending Purchase Orders</div>
+                <div class="fs-2 fw-bold text-dark mt-1">{{ metrics.pending_pos }}</div>
+                <div class="small text-muted">Draft, Pending, or Partial POs</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small text-uppercase fw-semibold">Pending Transfers</div>
+                <div class="fs-2 fw-bold text-dark mt-1">{{ metrics.pending_transfers }}</div>
+                <div class="small text-muted">Draft or Dispatched in-transit</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Reorder Alert Table -->
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Products At or Below Reorder Level</h6>
+                <span class="badge bg-danger">{{ metrics.below_reorder_count }}</span>
+            </div>
+            <div class="card-body p-0">
+                {% if metrics.below_reorder_items %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>SKU</th>
+                                <th>Product</th>
+                                <th class="text-end">Available</th>
+                                <th class="text-end">Reorder Level</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in metrics.below_reorder_items %}
+                            <tr>
+                                <td class="fw-mono small">{{ item.sku }}</td>
+                                <td>{{ item.name }}</td>
+                                <td class="text-end fw-bold text-danger">{{ item.available_stock }}</td>
+                                <td class="text-end text-muted">{{ item.reorder_level }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    All catalog products are currently above their reorder levels (or no products have been added yet).
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Stock Transactions -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Recent Stock Transactions</h6>
+                <a href="{{ url_for('transactions') }}" class="small text-decoration-none">View Full Ledger &rarr;</a>
+            </div>
+            <div class="card-body p-0">
+                {% if metrics.recent_transactions %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Type</th>
+                                <th>Product / Batch</th>
+                                <th>Warehouse</th>
+                                <th class="text-end">Qty</th>
+                                <th>Reference</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tx in metrics.recent_transactions %}
+                            <tr>
+                                <td><span class="badge bg-secondary">{{ tx.transaction_type }}</span></td>
+                                <td>
+                                    <div class="fw-semibold">{{ tx.product_name }}</div>
+                                    <div class="small text-muted">Batch: {{ tx.batch_number }}</div>
+                                </td>
+                                <td>{{ tx.warehouse_name }}</td>
+                                <td class="text-end fw-bold {% if tx.quantity > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ '+' if tx.quantity > 0 else '' }}{{ tx.quantity }}
+                                </td>
+                                <td class="small text-muted">{{ tx.reference_type }} {{ tx.reference_id }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No inventory transactions recorded yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

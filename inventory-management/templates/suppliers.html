@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% block title %}Suppliers Management & Integration — Multi-Warehouse IMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1 fw-bold">Supplier Directory &amp; External Catalog Integration</h3>
+        <p class="text-muted mb-0">Manage vendor contacts, view associated products/POs, and test the simulated external supplier integration adapter</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Add/Edit Supplier + Simulated External Integration Adapter -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">
+                    {% if edit_supplier %}
+                        Edit Supplier: {{ edit_supplier.supplier_code }}
+                    {% else %}
+                        Add New Supplier
+                    {% endif %}
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('suppliers_bp.edit', supplier_id=edit_supplier.id) if edit_supplier else url_for('suppliers_bp.create') }}">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Supplier Code <span class="text-danger">*</span></label>
+                        <input type="text" name="supplier_code" class="form-control fw-mono" required
+                               placeholder="e.g., SUP-APEX-01"
+                               value="{{ edit_supplier.supplier_code if edit_supplier else '' }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Company Name <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" required
+                               placeholder="e.g., Apex Pharma Distributors Pvt. Ltd."
+                               value="{{ edit_supplier.name if edit_supplier else '' }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Contact Person <span class="text-danger">*</span></label>
+                        <input type="text" name="contact_person" class="form-control" required
+                               placeholder="e.g., Rajesh Sharma"
+                               value="{{ edit_supplier.contact_person if edit_supplier else '' }}">
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-7">
+                            <label class="form-label small fw-semibold">Email <span class="text-danger">*</span></label>
+                            <input type="email" name="email" class="form-control" required
+                                   placeholder="orders@vendor.in"
+                                   value="{{ edit_supplier.email if edit_supplier else '' }}">
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label small fw-semibold">Phone <span class="text-danger">*</span></label>
+                            <input type="text" name="phone" class="form-control" required
+                                   placeholder="+91-9810012345"
+                                   value="{{ edit_supplier.phone if edit_supplier else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Address <span class="text-danger">*</span></label>
+                        <textarea name="address" class="form-control" rows="2" required
+                                  placeholder="Full street address and city">{{ edit_supplier.address if edit_supplier else '' }}</textarea>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="supplierActiveSwitch" name="is_active" value="1"
+                               {% if not edit_supplier or edit_supplier.is_active == 1 %}checked{% endif %}>
+                        <label class="form-check-label small fw-semibold" for="supplierActiveSwitch">
+                            Active Supplier
+                        </label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            {{ 'Update Supplier' if edit_supplier else 'Create Supplier' }}
+                        </button>
+                        {% if edit_supplier %}
+                            <a href="{{ url_for('suppliers_bp.index') }}" class="btn btn-outline-secondary">Cancel</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Simulated External Supplier Integration Adapter Card -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Simulated Supplier System Adapter</h6>
+                <span class="badge bg-info text-dark">Simulated API</span>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-3">
+                    Tests <code>integrations/supplier_adapter.py</code> to verify external supplier catalog pricing, MOQ, lead times, and failure/timeout handling without external API keys.
+                </p>
+                <form method="post" action="{{ url_for('suppliers_bp.verify_integration') }}">
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Supplier Endpoint <span class="text-danger">*</span></label>
+                        <select name="supplier_id" class="form-select form-select-sm" required>
+                            {% for s in suppliers %}
+                                <option value="{{ s.id }}">{{ s.supplier_code }} — {{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Catalog Product <span class="text-danger">*</span></label>
+                        <select name="product_id" class="form-select form-select-sm" required>
+                            {% for p in products %}
+                                <option value="{{ p.id }}">{{ p.sku }} — {{ p.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-5">
+                            <label class="form-label small fw-semibold">Order Qty</label>
+                            <input type="number" name="requested_quantity" class="form-control form-control-sm" value="50" min="1" required>
+                        </div>
+                        <div class="col-7">
+                            <label class="form-label small fw-semibold">Simulation Scenario</label>
+                            <select name="simulation_mode" class="form-select form-select-sm">
+                                <option value="SUCCESS">Success (200 OK)</option>
+                                <option value="FAILURE">Rejected / Backordered</option>
+                                <option value="TIMEOUT">Gateway Timeout (504)</option>
+                                <option value="UNAVAILABLE">Service Offline (503)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                        Query Simulated Supplier System
+                    </button>
+                </form>
+
+                {% if integration_result %}
+                <div class="mt-3 p-3 rounded border {% if integration_result.ok %}bg-success-subtle border-success{% else %}bg-danger-subtle border-danger{% endif %} small">
+                    <div class="fw-bold mb-1">
+                        Adapter Response: {{ integration_result.status }} (Simulated)
+                    </div>
+                    <div class="mb-1">{{ integration_result.message }}</div>
+                    {% if integration_result.vendor_sku %}
+                    <div class="fw-mono small text-muted">
+                        Vendor SKU: {{ integration_result.vendor_sku }} |
+                        Price: {{ currency_symbol }}{{ "%.2f"|format(integration_result.unit_price) }} |
+                        MOQ: {{ integration_result.min_order_qty }} |
+                        Lead Time: {{ integration_result.lead_time_days }}d
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Suppliers Table & Associations -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">Registered Suppliers ({{ suppliers|length }})</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if suppliers %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Supplier</th>
+                                <th>Contact Details</th>
+                                <th>Status</th>
+                                <th class="text-end">Products</th>
+                                <th class="text-end">POs</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in suppliers %}
+                            <tr class="{% if inspected_supplier and inspected_supplier.id == s.id %}table-primary{% endif %}">
+                                <td>
+                                    <div class="fw-mono fw-semibold text-primary small">{{ s.supplier_code }}</div>
+                                    <div class="fw-semibold">{{ s.name }}</div>
+                                    <div class="small text-muted">{{ s.address }}</div>
+                                </td>
+                                <td>
+                                    <div class="small fw-semibold">{{ s.contact_person }}</div>
+                                    <div class="small text-muted">{{ s.email }}</div>
+                                    <div class="small text-muted">{{ s.phone }}</div>
+                                </td>
+                                <td>
+                                    {% if s.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end fw-semibold">{{ s.product_count }}</td>
+                                <td class="text-end fw-semibold">{{ s.po_count }}</td>
+                                <td class="text-end">
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="{{ url_for('suppliers_bp.index', inspect_id=s.id) }}"
+                                           class="btn btn-sm btn-outline-dark">Associations</a>
+                                        <a href="{{ url_for('suppliers_bp.index', edit_id=s.id) }}"
+                                           class="btn btn-sm btn-outline-primary">Edit</a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No suppliers registered yet. Add a supplier using the form on the left.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if inspected_supplier %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0 fw-bold">
+                        Associated Products &amp; Purchase Orders — {{ inspected_supplier.name }}
+                    </h6>
+                    <div class="small text-muted">Code: {{ inspected_supplier.supplier_code }} | Contact: {{ inspected_supplier.contact_person }}</div>
+                </div>
+                <a href="{{ url_for('suppliers_bp.index') }}" class="btn btn-sm btn-outline-secondary">Close View</a>
+            </div>
+            <div class="card-body">
+                <h6 class="fw-bold small text-uppercase text-muted mb-2">Supplied Catalog Products ({{ associations.products|length }})</h6>
+                {% if associations.products %}
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>SKU</th>
+                                <th>Product Name</th>
+                                <th>Category</th>
+                                <th>Unit</th>
+                                <th class="text-end">Reorder Level</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for prod in associations.products %}
+                            <tr>
+                                <td class="fw-mono small">{{ prod.sku }}</td>
+                                <td>{{ prod.name }}</td>
+                                <td>{{ prod.category }}</td>
+                                <td>{{ prod.unit }}</td>
+                                <td class="text-end">{{ prod.reorder_level }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="small text-muted mb-4">No products currently linked to this supplier.</p>
+                {% endif %}
+
+                <h6 class="fw-bold small text-uppercase text-muted mb-2">Purchase Orders ({{ associations.purchase_orders|length }})</h6>
+                {% if associations.purchase_orders %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>PO Number</th>
+                                <th>Order Date</th>
+                                <th>Target Warehouse</th>
+                                <th>Status</th>
+                                <th class="text-end">Ordered Qty</th>
+                                <th class="text-end">Received Qty</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for po in associations.purchase_orders %}
+                            <tr>
+                                <td class="fw-mono small">{{ po.po_number }}</td>
+                                <td>{{ po.order_date }}</td>
+                                <td>{{ po.warehouse_name }}</td>
+                                <td><span class="badge bg-secondary">{{ po.status }}</span></td>
+                                <td class="text-end">{{ po.total_ordered }}</td>
+                                <td class="text-end">{{ po.total_received }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="small text-muted mb-0">No purchase orders created for this supplier yet.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

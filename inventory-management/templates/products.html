@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Products Management — Multi-Warehouse IMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1 fw-bold">Product Catalog Management</h3>
+        <p class="text-muted mb-0">Manage SKUs, categories, units, reorder thresholds, and preferred suppliers</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Add or Edit Product Form -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">
+                    {% if edit_product %}
+                        Edit Product: {{ edit_product.sku }}
+                    {% else %}
+                        Add New Product
+                    {% endif %}
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('products_bp.edit', product_id=edit_product.id) if edit_product else url_for('products_bp.create') }}">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">SKU Code <span class="text-danger">*</span></label>
+                        <input type="text" name="sku" class="form-control fw-mono" required
+                               placeholder="e.g., MED-PARA-500"
+                               value="{{ edit_product.sku if edit_product else '' }}">
+                        <div class="form-text">Must be unique across the catalog.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Product Name <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" required
+                               placeholder="e.g., Paracetamol 500mg Tablets"
+                               value="{{ edit_product.name if edit_product else '' }}">
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-7">
+                            <label class="form-label small fw-semibold">Category <span class="text-danger">*</span></label>
+                            <input type="text" name="category" class="form-control" required
+                                   placeholder="e.g., Pharmaceuticals"
+                                   value="{{ edit_product.category if edit_product else '' }}">
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label small fw-semibold">Unit <span class="text-danger">*</span></label>
+                            <input type="text" name="unit" class="form-control" required
+                                   placeholder="Boxes / Units"
+                                   value="{{ edit_product.unit if edit_product else 'Units' }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Reorder Level <span class="text-danger">*</span></label>
+                        <input type="number" name="reorder_level" class="form-control" min="0" required
+                               value="{{ edit_product.reorder_level if edit_product else 20 }}">
+                        <div class="form-text">Triggers reorder alert when available stock &le; this level.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Preferred Supplier</label>
+                        <select name="preferred_supplier_id" class="form-select">
+                            <option value="">-- Optional: Select Supplier --</option>
+                            {% for s in suppliers %}
+                                <option value="{{ s.id }}"
+                                    {% if edit_product and edit_product.preferred_supplier_id == s.id %}selected{% endif %}>
+                                    {{ s.supplier_code }} — {{ s.name }}{% if not s.is_active %} (Inactive){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Description</label>
+                        <textarea name="description" class="form-control" rows="2"
+                                  placeholder="Storage notes or pack specifications">{{ edit_product.description if edit_product else '' }}</textarea>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            {{ 'Update Product' if edit_product else 'Create Product' }}
+                        </button>
+                        {% if edit_product %}
+                            <a href="{{ url_for('products_bp.index') }}" class="btn btn-outline-secondary">Cancel</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Products Table -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Registered Products ({{ products|length }})</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if products %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>SKU &amp; Name</th>
+                                <th>Category</th>
+                                <th>Supplier</th>
+                                <th class="text-end">Available</th>
+                                <th class="text-end">Reorder</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in products %}
+                            <tr>
+                                <td>
+                                    <div class="fw-mono fw-semibold text-primary small">{{ p.sku }}</div>
+                                    <div class="fw-semibold">{{ p.name }}</div>
+                                    {% if p.description %}
+                                        <div class="small text-muted">{{ p.description }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">{{ p.category }}</span>
+                                    <div class="small text-muted mt-1">Unit: {{ p.unit }}</div>
+                                </td>
+                                <td>
+                                    {% if p.supplier_name %}
+                                        <div class="small fw-semibold">{{ p.supplier_name }}</div>
+                                        <div class="small text-muted fw-mono">{{ p.supplier_code }}</div>
+                                    {% else %}
+                                        <span class="text-muted small">Unassigned</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="fw-bold">{{ p.available_stock }}</div>
+                                    {% if p.total_stock != p.available_stock %}
+                                        <div class="small text-muted" title="Includes expired or inactive-warehouse stock">
+                                            Total: {{ p.total_stock }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end fw-mono">{{ p.reorder_level }}</td>
+                                <td>
+                                    {% if p.available_stock <= p.reorder_level %}
+                                        <span class="badge bg-danger">Reorder Needed</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Healthy</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="{{ url_for('products_bp.index', edit_id=p.id) }}"
+                                           class="btn btn-sm btn-outline-primary">Edit</a>
+                                        <form method="post"
+                                              action="{{ url_for('products_bp.delete', product_id=p.id) }}"
+                                              data-confirm="Delete product '{{ p.sku }} — {{ p.name }}'? Products with batch or transaction history cannot be deleted.">
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    {% if p.dependency_count > 0 %}
+                                                    title="Has {{ p.dependency_count }} dependent records"
+                                                    {% endif %}>
+                                                Delete
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No products found. Use the form on the left to add your first catalog product.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

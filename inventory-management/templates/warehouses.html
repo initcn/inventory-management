@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Warehouses Management — Multi-Warehouse IMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1 fw-bold">Warehouse Locations Management</h3>
+        <p class="text-muted mb-0">Configure storage facilities and inspect batch-level stock held at each warehouse</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Add or Edit Warehouse -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">
+                    {% if edit_warehouse %}
+                        Edit Warehouse: {{ edit_warehouse.warehouse_code }}
+                    {% else %}
+                        Add New Warehouse
+                    {% endif %}
+                </h6>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('warehouses_bp.edit', warehouse_id=edit_warehouse.id) if edit_warehouse else url_for('warehouses_bp.create') }}">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Warehouse Code <span class="text-danger">*</span></label>
+                        <input type="text" name="warehouse_code" class="form-control fw-mono" required
+                               placeholder="e.g., WH-DEL-01"
+                               value="{{ edit_warehouse.warehouse_code if edit_warehouse else '' }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Warehouse Name <span class="text-danger">*</span></label>
+                        <input type="text" name="name" class="form-control" required
+                               placeholder="e.g., Central Delhi Hub"
+                               value="{{ edit_warehouse.name if edit_warehouse else '' }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">City / Region <span class="text-danger">*</span></label>
+                        <input type="text" name="location" class="form-control" required
+                               placeholder="e.g., New Delhi, NCR"
+                               value="{{ edit_warehouse.location if edit_warehouse else '' }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Address / Description</label>
+                        <textarea name="address" class="form-control" rows="2"
+                                  placeholder="Plot number, industrial area, or storage capability">{{ edit_warehouse.address if edit_warehouse else '' }}</textarea>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="isActiveSwitch" name="is_active" value="1"
+                               {% if not edit_warehouse or edit_warehouse.is_active == 1 %}checked{% endif %}>
+                        <label class="form-check-label small fw-semibold" for="isActiveSwitch">
+                            Warehouse is Active (eligible for receipts &amp; transfers)
+                        </label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            {{ 'Update Warehouse' if edit_warehouse else 'Create Warehouse' }}
+                        </button>
+                        {% if edit_warehouse %}
+                            <a href="{{ url_for('warehouses_bp.index') }}" class="btn btn-outline-secondary">Cancel</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Warehouses List & Selected Warehouse Stock -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">Warehouses Directory ({{ warehouses|length }})</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if warehouses %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Code &amp; Name</th>
+                                <th>Location</th>
+                                <th>Status</th>
+                                <th class="text-end">SKUs</th>
+                                <th class="text-end">Total Units</th>
+                                <th class="text-end">Valuation</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for w in warehouses %}
+                            <tr class="{% if inspected_warehouse and inspected_warehouse.id == w.id %}table-primary{% endif %}">
+                                <td>
+                                    <div class="fw-mono fw-semibold text-primary small">{{ w.warehouse_code }}</div>
+                                    <div class="fw-semibold">{{ w.name }}</div>
+                                    {% if w.address %}
+                                        <div class="small text-muted">{{ w.address }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ w.location }}</td>
+                                <td>
+                                    {% if w.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">{{ w.distinct_products }}</td>
+                                <td class="text-end fw-bold">{{ w.total_units }}</td>
+                                <td class="text-end fw-mono">{{ currency_symbol }}{{ "%.2f"|format(w.total_stock_value) }}</td>
+                                <td class="text-end">
+                                    <div class="d-inline-flex gap-1">
+                                        <a href="{{ url_for('warehouses_bp.index', inspect_id=w.id) }}"
+                                           class="btn btn-sm btn-outline-dark">View Stock</a>
+                                        <a href="{{ url_for('warehouses_bp.index', edit_id=w.id) }}"
+                                           class="btn btn-sm btn-outline-primary">Edit</a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No warehouses configured yet. Add a warehouse using the form on the left.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if inspected_warehouse %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0 fw-bold">
+                        Stock Available at {{ inspected_warehouse.name }} ({{ inspected_warehouse.warehouse_code }})
+                    </h6>
+                    <div class="small text-muted">{{ inspected_warehouse.location }} — {{ inspected_warehouse.address }}</div>
+                </div>
+                <a href="{{ url_for('warehouses_bp.index') }}" class="btn btn-sm btn-outline-secondary">Close View</a>
+            </div>
+            <div class="card-body p-0">
+                {% if warehouse_stock %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Product</th>
+                                <th>Batch No.</th>
+                                <th>Receipt Date</th>
+                                <th>Expiry Date</th>
+                                <th class="text-end">Qty</th>
+                                <th class="text-end">Unit Cost</th>
+                                <th class="text-end">Batch Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in warehouse_stock %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ row.product_name }}</div>
+                                    <div class="small text-muted fw-mono">{{ row.sku }}</div>
+                                </td>
+                                <td class="fw-mono">{{ row.batch_number }}</td>
+                                <td class="small">{{ row.receipt_date }}</td>
+                                <td>
+                                    {% if row.expiry_date %}
+                                        <span class="small">{{ row.expiry_date }}</span>
+                                        {% if row.expiry_status == 'EXPIRED' %}
+                                            <span class="badge bg-danger ms-1">Expired</span>
+                                        {% elif row.expiry_status == 'NEAR_EXPIRY' %}
+                                            <span class="badge bg-warning text-dark ms-1">Near Expiry</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted small">Non-Perishable</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end fw-bold">{{ row.quantity }} {{ row.unit }}</td>
+                                <td class="text-end fw-mono">{{ currency_symbol }}{{ "%.2f"|format(row.unit_cost) }}</td>
+                                <td class="text-end fw-mono fw-semibold">{{ currency_symbol }}{{ "%.2f"|format(row.batch_value) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No active stock batches are currently held at {{ inspected_warehouse.name }}.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

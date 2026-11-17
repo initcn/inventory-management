@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Stock Transaction History — Multi-Warehouse IMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1 fw-bold">Immutable Stock Transaction Ledger</h3>
+        <p class="text-muted mb-0">Complete audit trail of receipts, FIFO issues, inter-warehouse transfers, supplier returns, and adjustments</p>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body py-3">
+        <form method="get" action="{{ url_for('inventory_bp.transactions') }}" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold mb-1">Product</label>
+                <select name="product_id" class="form-select form-select-sm">
+                    <option value="">All Products</option>
+                    {% for p in products %}
+                        <option value="{{ p.id }}" {% if filters.product_id == p.id %}selected{% endif %}>
+                            {{ p.sku }} — {{ p.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold mb-1">Warehouse</label>
+                <select name="warehouse_id" class="form-select form-select-sm">
+                    <option value="">All Warehouses</option>
+                    {% for w in warehouses %}
+                        <option value="{{ w.id }}" {% if filters.warehouse_id == w.id %}selected{% endif %}>
+                            {{ w.warehouse_code }} — {{ w.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-semibold mb-1">Transaction Type</label>
+                <select name="transaction_type" class="form-select form-select-sm">
+                    <option value="">All Transaction Types</option>
+                    {% for t_type in transaction_types %}
+                        <option value="{{ t_type }}" {% if filters.transaction_type == t_type %}selected{% endif %}>
+                            {{ t_type }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-1">
+                <button type="submit" class="btn btn-primary btn-sm w-100">Filter</button>
+                <a href="{{ url_for('inventory_bp.transactions') }}" class="btn btn-outline-secondary btn-sm">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Transactions Table -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <h6 class="mb-0 fw-bold">Recorded Stock Movements ({{ transactions|length }})</h6>
+    </div>
+    <div class="card-body p-0">
+        {% if transactions %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID &amp; Timestamp</th>
+                        <th>Type</th>
+                        <th>Product</th>
+                        <th>Batch No.</th>
+                        <th>Warehouse</th>
+                        <th class="text-end">Signed Qty</th>
+                        <th class="text-end">Unit Cost</th>
+                        <th>Reference &amp; Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in transactions %}
+                    <tr>
+                        <td class="small">
+                            <div class="fw-mono fw-semibold">#{{ tx.id }}</div>
+                            <div class="text-muted">{{ tx.created_at }}</div>
+                        </td>
+                        <td>
+                            {% if tx.transaction_type in ('GOODS_RECEIPT', 'TRANSFER_RECEIPT') %}
+                                <span class="badge bg-success">{{ tx.transaction_type }}</span>
+                            {% elif tx.transaction_type in ('STOCK_ISSUE', 'SUPPLIER_RETURN', 'TRANSFER_DISPATCH') %}
+                                <span class="badge bg-danger">{{ tx.transaction_type }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ tx.transaction_type }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="fw-semibold">{{ tx.product_name }}</div>
+                            <div class="small text-muted fw-mono">{{ tx.sku }}</div>
+                        </td>
+                        <td class="fw-mono">{{ tx.batch_number }}</td>
+                        <td>
+                            <div class="fw-mono small fw-semibold">{{ tx.warehouse_code }}</div>
+                            <div class="small text-muted">{{ tx.warehouse_name }}</div>
+                        </td>
+                        <td class="text-end fw-bold {% if tx.quantity > 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ '+' if tx.quantity > 0 else '' }}{{ tx.quantity }} {{ tx.unit }}
+                        </td>
+                        <td class="text-end fw-mono">{{ currency_symbol }}{{ "%.2f"|format(tx.unit_cost) }}</td>
+                        <td class="small">
+                            <div class="fw-mono">{{ tx.reference_type }}: {{ tx.reference_id }}</div>
+                            {% if tx.notes %}
+                                <div class="text-muted">{{ tx.notes }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-4 text-center text-muted">
+            No stock transactions match the selected criteria.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

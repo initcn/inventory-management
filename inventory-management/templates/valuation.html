@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}FIFO Stock Issue & Valuation — Multi-Warehouse IMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1 fw-bold">FIFO Stock Issue &amp; Inventory Valuation</h3>
+        <p class="text-muted mb-0">
+            Consume oldest non-expired batches first (ordered by Batch Receipt Date, then Batch ID) and compute exact FIFO cost
+        </p>
+    </div>
+    <div class="card border-0 shadow-sm bg-primary text-white px-3 py-2">
+        <div class="small text-uppercase fw-semibold">Total Eligible FIFO Valuation</div>
+        <div class="fs-5 fw-bold fw-mono">{{ currency_symbol }}{{ "%.2f"|format(total_eligible_value) }}</div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Issue Stock via FIFO -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">Issue Stock (Automatic FIFO Consumption)</h6>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('inventory_bp.issue_fifo') }}">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Source Warehouse <span class="text-danger">*</span></label>
+                        <select name="warehouse_id" class="form-select" required>
+                            <option value="">-- Select Active Warehouse --</option>
+                            {% for w in warehouses %}
+                                <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>
+                                    {{ w.warehouse_code }} — {{ w.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Product <span class="text-danger">*</span></label>
+                        <select name="product_id" class="form-select" required>
+                            <option value="">-- Select Product to Issue --</option>
+                            {% for p in products %}
+                                <option value="{{ p.id }}">
+                                    {{ p.sku }} — {{ p.name }} (Eligible Avail: {{ p.available_stock }} {{ p.unit }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Issue Quantity <span class="text-danger">*</span></label>
+                            <input type="number" name="issue_quantity" class="form-control" min="1" required
+                                   placeholder="e.g., 60">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Issue Date <span class="text-danger">*</span></label>
+                            <input type="date" name="issue_date" class="form-control" value="{{ today_iso }}" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Recipient / Department / Order Ref</label>
+                        <input type="text" name="recipient_reference" class="form-control"
+                               placeholder="e.g., Outpatient Pharmacy Requisition #OP-204">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Notes</label>
+                        <input type="text" name="notes" class="form-control"
+                               placeholder="Optional dispatch note">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">Execute FIFO Stock Issue</button>
+                </form>
+                <div class="mt-3 p-2 bg-light rounded small text-muted">
+                    <strong>FIFO Rule:</strong> Consumes eligible non-expired batches sorted by
+                    <code>receipt_date ASC, batch_id ASC</code>. Expired batches are strictly excluded.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: FIFO Consumption Breakdown History & Current FIFO Queue -->
+    <div class="col-lg-8">
+        <!-- FIFO Stock Issue Valuation History -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">FIFO Stock Issue Valuation Breakdown ({{ issue_history|length }} issue(s))</h6>
+            </div>
+            <div class="card-body">
+                {% if issue_history %}
+                    {% for entry in issue_history %}
+                    <div class="border rounded p-3 mb-3 bg-white">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+                            <div>
+                                <span class="fw-mono fw-bold text-primary">{{ entry.header.issue_number }}</span>
+                                <span class="badge bg-light text-dark border ms-2">{{ entry.header.warehouse_code }} — {{ entry.header.warehouse_name }}</span>
+                                <span class="small text-muted ms-2">Date: {{ entry.header.issue_date }}</span>
+                                {% if entry.header.recipient_reference %}
+                                    <span class="small text-muted ms-2">| Ref: {{ entry.header.recipient_reference }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="text-end">
+                                <span class="small text-muted">Total Issued:</span>
+                                <span class="fw-bold">{{ entry.header.total_quantity }}</span> |
+                                <span class="small text-muted">Total FIFO Value:</span>
+                                <span class="fw-mono fw-bold text-success">{{ currency_symbol }}{{ "%.2f"|format(entry.header.total_cost) }}</span>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Product</th>
+                                        <th>Consumed Batch</th>
+                                        <th>Batch Receipt Date</th>
+                                        <th class="text-end">Qty Consumed</th>
+                                        <th class="text-end">Batch Unit Cost</th>
+                                        <th class="text-end">FIFO Line Cost</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for line in entry.lines %}
+                                    <tr>
+                                        <td><span class="fw-mono small">{{ line.sku }}</span> — {{ line.product_name }}</td>
+                                        <td class="fw-mono fw-semibold">{{ line.batch_number }}</td>
+                                        <td class="fw-mono small">{{ line.receipt_date }}</td>
+                                        <td class="text-end fw-bold">{{ line.quantity }} {{ line.unit }}</td>
+                                        <td class="text-end fw-mono">{{ currency_symbol }}{{ "%.2f"|format(line.unit_cost) }}</td>
+                                        <td class="text-end fw-mono fw-semibold">{{ currency_symbol }}{{ "%.2f"|format(line.line_cost) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="text-center text-muted py-3">
+                    No FIFO stock issues have been executed yet. Use the form on the left to issue stock and view the batch-by-batch FIFO cost breakdown.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Current FIFO Layer Queue -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold">Current Eligible FIFO Batch Queue ({{ fifo_layers|length }} layers)</h6>
+                <form method="get" action="{{ url_for('inventory_bp.valuation') }}">
+                    <select name="warehouse_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">All Active Warehouses</option>
+                        {% for w in warehouses %}
+                            <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>
+                                {{ w.warehouse_code }} — {{ w.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            <div class="card-body p-0">
+                {% if fifo_layers %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Warehouse</th>
+                                <th>Product</th>
+                                <th>FIFO Order</th>
+                                <th>Batch No.</th>
+                                <th>Receipt Date</th>
+                                <th>Expiry Date</th>
+                                <th class="text-end">Available Qty</th>
+                                <th class="text-end">Unit Cost</th>
+                                <th class="text-end">Layer Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for layer in fifo_layers %}
+                            <tr>
+                                <td class="fw-mono small fw-semibold">{{ layer.warehouse_code }}</td>
+                                <td>
+                                    <div class="fw-semibold small">{{ layer.product_name }}</div>
+                                    <div class="small text-muted fw-mono">{{ layer.sku }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge {% if layer.fifo_rank == 1 %}bg-primary{% else %}bg-secondary{% endif %}">
+                                        FIFO #1 (Next)
+                                    </span>
+                                    {% if layer.fifo_rank > 1 %}
+                                        <script>document.currentScript.previousElementSibling.textContent = "FIFO #{{ layer.fifo_rank }}";</script>
+                                    {% endif %}
+                                </td>
+                                <td class="fw-mono fw-semibold">{{ layer.batch_number }}</td>
+                                <td class="fw-mono small">{{ layer.receipt_date }}</td>
+                                <td class="small">{{ layer.expiry_date or 'Non-Perishable' }}</td>
+                                <td class="text-end fw-bold">{{ layer.remaining_quantity }} {{ layer.unit }}</td>
+                                <td class="text-end fw-mono">{{ currency_symbol }}{{ "%.2f"|format(layer.unit_cost) }}</td>
+                                <td class="text-end fw-mono fw-semibold">{{ currency_symbol }}{{ "%.2f"|format(layer.layer_value) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No eligible FIFO stock layers found.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

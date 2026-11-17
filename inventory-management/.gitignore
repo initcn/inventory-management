@@ -1,0 +1,49 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Local SQLite database and journal files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+inventory.db
+
+# Flask instance and environment variables
+instance/
+.webassets-cache
+.env
+.flaskenv
+
+# Unit test / coverage artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+.unittest/
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# StarUML backup files (keep .mdj source files tracked)
+*.mdj~
+*.bak

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Supplier Returns — Multi-Warehouse IMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1 fw-bold">Supplier Returns Management</h3>
+        <p class="text-muted mb-0">Return damaged, recalled, or expired batch stock to vendors while preserving historical audit records</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Record Supplier Return -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">Process Supplier Return</h6>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('returns_bp.create') }}">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">1. Select Warehouse &amp; Batch Holding <span class="text-danger">*</span></label>
+                        <select name="batch_id" class="form-select" required
+                                onchange="const opt = this.options[this.selectedIndex]; document.getElementById('retWhInput').value = opt.getAttribute('data-wh') || '';">
+                            <option value="">-- Select Batch to Return --</option>
+                            {% for h in holdings %}
+                                <option value="{{ h.batch_id }}" data-wh="{{ h.warehouse_id }}">
+                                    [{{ h.warehouse_code }}] {{ h.sku }} | Batch {{ h.batch_number }} (Rem: {{ h.remaining_quantity }} | {{ h.expiry_status }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <input type="hidden" name="warehouse_id" id="retWhInput" value="">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">2. Supplier <span class="text-danger">*</span></label>
+                        <select name="supplier_id" class="form-select" required>
+                            <option value="">-- Select Supplier --</option>
+                            {% for s in suppliers %}
+                                <option value="{{ s.id }}">{{ s.supplier_code }} — {{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Return Quantity <span class="text-danger">*</span></label>
+                            <input type="number" name="return_quantity" class="form-control" min="1" required
+                                   placeholder="e.g., 10">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Return Date <span class="text-danger">*</span></label>
+                            <input type="date" name="return_date" class="form-control" value="{{ today_iso }}" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Return Reason <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" rows="2" required
+                                  placeholder="e.g., Batch expired / Packaging damage found on inspection"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-danger w-100">Record Supplier Return</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Supplier Returns History -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">Supplier Return Notes Register ({{ returns_list|length }})</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if returns_list %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Return No. &amp; Date</th>
+                                <th>Supplier</th>
+                                <th>Warehouse</th>
+                                <th>Product &amp; Batch</th>
+                                <th class="text-end">Qty Returned</th>
+                                <th class="text-end">Credit Value</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in returns_list %}
+                            <tr>
+                                <td>
+                                    <div class="fw-mono fw-bold text-danger small">{{ r.return_number }}</div>
+                                    <div class="small text-muted">{{ r.return_date }}</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold small">{{ r.supplier_name }}</div>
+                                    <div class="small text-muted fw-mono">{{ r.supplier_code }}</div>
+                                </td>
+                                <td class="fw-mono small">{{ r.warehouse_code }}</td>
+                                <td>
+                                    <div class="fw-semibold small">{{ r.product_name }}</div>
+                                    <div class="small text-muted fw-mono">Batch: {{ r.batch_number }}</div>
+                                </td>
+                                <td class="text-end fw-bold text-danger">-{{ r.quantity }} {{ r.unit }}</td>
+                                <td class="text-end fw-mono fw-semibold">{{ currency_symbol }}{{ "%.2f"|format(r.return_value) }}</td>
+                                <td class="small">{{ r.reason }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No supplier returns have been recorded yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

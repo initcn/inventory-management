@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Goods Receipts (GRN) — Multi-Warehouse IMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="mb-1 fw-bold">Goods Receipts &amp; Partial Delivery Processing</h3>
+        <p class="text-muted mb-0">Receive partial or full shipments against Purchase Orders and instantiate batch inventory</p>
+    </div>
+    <div>
+        <a href="{{ url_for('purchases_bp.index') }}" class="btn btn-outline-secondary btn-sm">&larr; Back to Purchase Orders</a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Select Open PO & Record Partial/Full Receipt -->
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">1. Select Open Purchase Order</h6>
+            </div>
+            <div class="card-body">
+                {% if receivable_pos %}
+                <form method="get" action="{{ url_for('purchases_bp.receipts') }}">
+                    <div class="input-group">
+                        <select name="po_id" class="form-select" onchange="this.form.submit()">
+                            {% for po in receivable_pos %}
+                                <option value="{{ po.id }}" {% if selected_po and selected_po.header.id == po.id %}selected{% endif %}>
+                                    {{ po.po_number }} — {{ po.supplier_name }} ({{ po.status }} | Pending: {{ po.total_pending }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-outline-primary">Load PO</button>
+                    </div>
+                </form>
+                {% else %}
+                <div class="text-muted small">
+                    No open purchase orders have pending quantities. Create or auto-generate a PO on the Purchase Orders page first.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if selected_po %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">2. Record Goods Receipt for {{ selected_po.header.po_number }}</h6>
+                <div class="small text-muted">Supplier: {{ selected_po.header.supplier_name }}</div>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('purchases_bp.create_receipt') }}">
+                    <input type="hidden" name="po_id" value="{{ selected_po.header.id }}">
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">PO Line Item (Pending Qty) <span class="text-danger">*</span></label>
+                        <select name="po_item_id" class="form-select" required>
+                            {% for item in selected_po['items'] if item.pending_quantity > 0 %}
+                                <option value="{{ item.id }}">
+                                    {{ item.sku }} — {{ item.product_name }} (Ordered: {{ item.ordered_quantity }}, Pending: {{ item.pending_quantity }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Receiving Warehouse <span class="text-danger">*</span></label>
+                        <select name="warehouse_id" class="form-select" required>
+                            {% for w in warehouses %}
+                                <option value="{{ w.id }}" {% if w.id == selected_po.header.target_warehouse_id %}selected{% endif %}>
+                                    {{ w.warehouse_code }} — {{ w.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Batch Number <span class="text-danger">*</span></label>
+                            <input type="text" name="batch_number" class="form-control fw-mono" required
+                                   placeholder="e.g., BATCH-2026-A">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Qty Received Now <span class="text-danger">*</span></label>
+                            <input type="number" name="received_quantity" class="form-control" min="1" required
+                                   placeholder="Partial or full qty">
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Actual Unit Cost ({{ currency_symbol }}) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.01" min="0" name="unit_cost" class="form-control"
+                                value="{{ '%.2f'|format(selected_po['items'][0].expected_unit_cost) if selected_po['items'] else '100.00' }}" required>                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Receipt Date <span class="text-danger">*</span></label>
+                            <input type="date" name="receipt_date" class="form-control" value="{{ today_iso }}" required>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Mfg. Date</label>
+                            <input type="date" name="mfg_date" class="form-control">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Expiry Date</label>
+                            <input type="date" name="expiry_date" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Delivery / Challan Notes</label>
+                        <input type="text" name="notes" class="form-control"
+                               placeholder="e.g., Shipment 1 of 2 (Challan #DC-408)">
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100">Post Goods Receipt &amp; Update Stock</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: Goods Receipts History Table -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold">Goods Receipt Note (GRN) Register ({{ grn_history|length }})</h6>
+            </div>
+            <div class="card-body p-0">
+                {% if grn_history %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>GRN &amp; Date</th>
+                                <th>PO Ref</th>
+                                <th>Product &amp; Batch</th>
+                                <th>Warehouse</th>
+                                <th class="text-end">Qty</th>
+                                <th class="text-end">Unit Cost</th>
+                                <th class="text-end">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in grn_history %}
+                            <tr>
+                                <td>
+                                    <div class="fw-mono fw-bold text-success small">{{ row.grn_number }}</div>
+                                    <div class="small text-muted">{{ row.receipt_date }}</div>
+                                </td>
+                                <td>
+                                    <div class="fw-mono small fw-semibold">{{ row.po_number }}</div>
+                                    <span class="badge bg-light text-dark border small">{{ row.po_status }}</span>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold small">{{ row.product_name }}</div>
+                                    <div class="small text-muted fw-mono">
+                                        Batch: {{ row.batch_number }}{% if row.expiry_date %} | Exp: {{ row.expiry_date }}{% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-mono small">{{ row.warehouse_code }}</div>
+                                    <div class="small text-muted">{{ row.warehouse_name }}</div>
+                                </td>
+                                <td class="text-end fw-bold text-success">+{{ row.received_quantity }} {{ row.unit }}</td>
+                                <td class="text-end fw-mono">{{ currency_symbol }}{{ "%.2f"|format(row.unit_cost) }}</td>
+                                <td class="text-end fw-mono fw-semibold">{{ currency_symbol }}{{ "%.2f"|format(row.line_total) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted">
+                    No goods receipts have been recorded yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
